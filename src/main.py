@@ -33,22 +33,14 @@ from langchain_chroma import Chroma
 
 import logic
 
-
-MESSAGES = None
 TEMPLATES = None
 
 
 async def init():
-    global MESSAGES, TEMPLATES
-
+    global TEMPLATES
     TEMPLATES = Jinja2Templates(directory="html_templates")
-    MESSAGES = [AIMessage("Hello! How can I help you today?")]
 
     await logic.init()
-
-
-def get_messages():
-    return MESSAGES
 
 
 def get_templates():
@@ -69,12 +61,13 @@ app = FastAPI(lifespan=lifespan)
 async def get_form(
     request: Request,
     templates: Annotated[Jinja2Templates, Depends(get_templates)],
-    messages: Annotated[List[BaseMessage], Depends(get_messages)],
+    messages: Annotated[List[BaseMessage], Depends(logic.get_messages)],
 ):
-    processed_messages = map(
-        lambda m: (m.type, markdown2.markdown(str(m.content))),
-        filter(lambda m: m.type in ["ai", "human"], messages),
-    )
+    processed_messages = [
+        (message.type, markdown2.markdown(str(message.content)))
+        for message in messages
+        if message.content and message.type in ["ai", "human"]
+    ]
 
     return templates.TemplateResponse(
         request=request,
@@ -86,15 +79,7 @@ async def get_form(
 @app.post("/send_message")
 async def post_form(
     message: Annotated[str, Form()],
-    messages: Annotated[List[BaseMessage], Depends(get_messages)],
-    graph: Annotated[CompiledStateGraph, Depends(logic.get_graph)],
 ):
-    if not message:
-        return
-
-    messages.append(HumanMessage(message))
-    config = {"configurable": {"user_id": "1", "thread_id": "1"}}
-    result = await graph.ainvoke({"user_message": message}, config=config)
-    messages.append(AIMessage(result["final_answer"]))
+    await logic.send_message(message)
 
     return RedirectResponse(url="/", status_code=status.HTTP_302_FOUND)

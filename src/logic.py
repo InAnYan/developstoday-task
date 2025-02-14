@@ -39,16 +39,23 @@ AI_TEMPLATES = None
 
 
 async def init():
+    init_ai_templates()
     init_models()
     await init_vector_db()
-    init_ai_templates()
     init_state()
+
+
+def init_ai_templates():
+    global AI_TEMPLATES
+    AI_TEMPLATES = Jinja2Templates(directory="ai_templates")
 
 
 def init_models():
     global LLM, EMBEDDING_MODEL
 
     LLM = init_chat_model("gpt-4o-mini")
+    LLM = LLM.bind_tools([update_preference_tool, retrieve_cocktails_tool])
+
     EMBEDDING_MODEL = OpenAIEmbeddings()
 
 
@@ -61,24 +68,21 @@ async def update_preference_tool(preference: str):
     """
 
     state = get_state()
+    print(f"NEW PREFERENCE: {preference}")
     state["user_preference"] = preference
-    state["messages"][0] = SystemMessage(fill_template("system.message", state))
+    state["messages"][0] = SystemMessage(fill_template("system.message", state))  # type: ignore
 
 
-def convert_cocktail(id_row: Tuple[Hashable, pd.Series]) -> Document:
-    row = id_row[1]
+@tool(parse_docstring=True)
+async def retrieve_cocktails_tool(query: str) -> List[Document]:
+    """Retrieve cocktail information from the database.
 
-    metadata = {
-        "id": row["id"],
-        "name": row["name"],
-        "instructions": row["instructions"],
-        "ingredients": row["ingredients"],
-        "alcoholic": row["alcoholic"] == "Alcoholic",
-    }
+    Args:
+        query (str): Query to the database.
+    """
 
-    text = f"{metadata['name']} (Alcoholic: {metadata['alcoholic']}): {metadata['ingredients']}"
-
-    return Document(page_content=text, metadata=metadata)
+    assert VECTOR_DB
+    return await VECTOR_DB.asimilarity_search(query)
 
 
 async def init_vector_db():
@@ -98,14 +102,25 @@ async def init_vector_db():
     await VECTOR_DB.aadd_documents(list(map(convert_cocktail, df.iterrows())))
 
 
-def init_ai_templates():
-    global AI_TEMPLATES
-    AI_TEMPLATES = Jinja2Templates(directory="ai_templates")
+def convert_cocktail(id_row: Tuple[Hashable, pd.Series]) -> Document:
+    row = id_row[1]
+
+    metadata = {
+        "id": row["id"],
+        "name": row["name"],
+        "instructions": row["instructions"],
+        "ingredients": row["ingredients"],
+        "alcoholic": row["alcoholic"] == "Alcoholic",
+    }
+
+    text = f"{metadata['name']} (Alcoholic: {metadata['alcoholic']}): {metadata['ingredients']}"
+
+    return Document(page_content=text, metadata=metadata)
 
 
 def init_state():
     messages = [
-        SystemMessage(fill_template("system.message", {"user_preference": None})),
+        SystemMessage(fill_template("system.message")),
         AIMessage(fill_template("first.message")),
     ]
 
@@ -113,71 +128,49 @@ def init_state():
     STATE = State(messages=messages, user_preference=None)
 
 
-async def update_preference(state: State):
-    update_preferences_message = fill_template("update_preference.message", state=state)
+async def send_message(input: str):
+    if not input:
+        return
 
-    result = await llm_answer(update_preferences_message)
-
-    if result.strip().startswith("None"):
-        return {}
-    else:
-        return {"user_preference": result}
+    state = get_state()
+    state["messages"].append(HumanMessage(content=input))
+    await call_llm()
 
 
-async def chat_or_retrieve(state: State) -> str:
-    pass
+async def call_llm():
+    state = get_state()
+
+    result = await get_llm().ainvoke(state["messages"])
+    state["messages"].append(result)
+
+    if result.tool_calls:  # type: ignore
+        for tool_call in result.tool_calls:  # type: ignore
+            match tool_call["name"]:
+                case "update_preference_tool":
+                    res = await update_preference_tool.ainvoke(tool_call)
+                    state["messages"].append(res)
+                case "retrieve_cocktails_tool":
+                    res = await retrieve_cocktails_tool.ainvoke(tool_call)
+                    state["messages"].append(res)
+
+        await call_llm()
 
 
-async def gen_query(state: State):
-    gen_query_message = fill_template("gen_query.message", state=state)
-    result = await llm_answer(gen_query_message)
-    return {"query": result}
-
-
-async def retrieve(state: State):
-    if state["query"]:
-        result = await vector_db_search(state["query"])
-        return {"cocktails": result}
-    else:
-        return {}
-
-
-async def answer_with_documents(state: State):
-    answer_message = fill_template("answer_with_documents.message", state=state)
-    result = await llm_answer(answer_message)
-    return {"final_answer": result}
-
-
-async def llm_answer(input: str) -> str:
-    assert LLM
-    res = str((await LLM.ainvoke(input)).content)
-    # print("LLM ANSWER: ")
-    # print(res)
-    # print()
-    return res
-
-
-def get_embedding_model():
-    assert EMBEDDING_MODEL
-    return EMBEDDING_MODEL
-
-
-async def vector_db_search(query: str) -> List[Document]:
-    assert VECTOR_DB
-    print(f"QUERY: {query}")
-    res = await VECTOR_DB.asimilarity_search(query)
-    print(f"RESULTS: {res}")
-    print()
-    return res
-
-
-def fill_template(name: str, context: State) -> str:
+def fill_template(name: str, context: dict = {}) -> str:
     # Do not change default parameter.
     assert AI_TEMPLATES
-    res = AI_TEMPLATES.get_template(name).render(context)
-    return res
+    return AI_TEMPLATES.get_template(name).render(context)
 
 
 def get_state() -> State:
     assert STATE
     return STATE
+
+
+def get_messages() -> List[BaseMessage]:
+    return get_state()["messages"]
+
+
+def get_llm() -> BaseChatModel:
+    assert LLM
+    return LLM  # type: ignore
