@@ -1,37 +1,17 @@
-# 1. Create database
-# 2. Load data
-# 3. Start server.
-
-# Data abstraction:
-# Langchain documentsa
-# Document type: cocktail-info, user-info.
-
-# Server:
-# Get form
-# Post form
-
-
-from typing import Annotated, Hashable, List, Tuple
-import pandas as pd
+from typing import Annotated, List
 import markdown2
 
 from fastapi import Depends, FastAPI, Form, Request
 from fastapi.concurrency import asynccontextmanager
 from fastapi.responses import RedirectResponse, HTMLResponse
 from fastapi.templating import Jinja2Templates
+
 import starlette.status as status
 
-from langchain_openai import OpenAIEmbeddings
-from langchain_core.messages import SystemMessage, HumanMessage, BaseMessage, AIMessage
-from langchain_core.documents import Document
-from langchain_core.language_models import BaseChatModel
-from langchain.chat_models import init_chat_model
-from langgraph.graph.state import CompiledStateGraph
-
-from langchain_chroma import Chroma
-
+from langchain_core.messages import BaseMessage
 
 import logic
+
 
 TEMPLATES = None
 
