@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+
+<head>
+    <title>Chat with a barmen</title>
+    <style>
+        h1,
+        h2 {
+            text-align: center;
+        }
+
+        .chat {
+            width: 50%;
+            margin-left: auto;
+            margin-right: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .chat-history {
+            border-style: solid;
+            border-width: 3px;
+            padding: 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .message-box {
+            padding: 10px;
+        }
+
+        .message-you {
+            background-color: lightyellow;
+        }
+
+        .message-ai {
+            background-color: lightblue;
+        }
+
+        .prompt-container {
+            display: flex;
+            flex-direction: row;
+            gap: 10px;
+            width: 100%;
+        }
+
+        .prompt {
+            flex-grow: 1;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>Chat with a barmen</h1>
+    <h2>This is a test task from DevelopsToday</h2>
+
+    <br>
+
+    <div class="chat">
+        <div class="chat-history">
+
+            {% for (type, content) in messages %}
+
+            {% if type == "ai" %}
+
+            <div class="message-box message-ai">
+                <div class="message-author">
+                    AI
+                </div>
+
+                <div class="message-text">
+                    {{ content|safe }}
+                </div>
+            </div>
+
+            {% else %}
+
+            <div class="message-box message-you">
+                <div class="message-author">
+                    You
+                </div>
+
+                <div class="message-text">
+                    {{ content|safe }}
+                </div>
+            </div>
+
+            {% endif %}
+
+            {% endfor %}
+
+        </div>
+
+        <div class="prompt-container">
+            <form class="prompt-container" method="POST" action="/send_message">
+                <input class="prompt" name="message">
+                <button class="prompt-submit" type="submit">Send</button>
+            </form>
+        </div>
+
+    </div>
+
+    <p style="text-align: center; position: fixed; bottom: 0;">Made by Ruslan Popov (InAnYan)</p>
+
+</body>
