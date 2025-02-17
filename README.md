@@ -28,11 +28,19 @@ First, install the dependencies:
 pip install -r requirements.txt
 ```
 
-Then, you can run it as follows:
+Then, export your OpenAI API key to an environment variable:
+
+```sh
+export OPENAI_API_KEY=sk-...
+```
+
+Finally, you can run it as follows:
 
 ```python
 fastapi dev src/main.py
 ```
+
+And go to <http://127.0.0.1:8000>.
 
 In case that command didn't work, you can try this instead:
 
